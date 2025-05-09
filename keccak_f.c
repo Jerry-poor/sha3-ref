@@ -1,29 +1,43 @@
 #include "round.h"
 
+// 24 轮常量表
+static const uint64_t ROUND_CONSTANTS[24] = {
+    0x0000000000000001ULL, 0x0000000000008082ULL, 0x800000000000808AULL,
+    0x8000000080008000ULL, 0x000000000000808BULL, 0x0000000080000001ULL,
+    0x8000000080008081ULL, 0x8000000000008009ULL, 0x000000000000008AULL,
+    0x0000000000000088ULL, 0x0000000080008009ULL, 0x000000008000000AULL,
+    0x000000008000808BULL, 0x800000000000008BULL, 0x8000000000008089ULL,
+    0x8000000000008003ULL, 0x8000000000008002ULL, 0x8000000000000080ULL,
+    0x000000000000800AULL, 0x800000008000000AULL, 0x8000000080008081ULL,
+    0x8000000000008080ULL, 0x0000000080000001ULL, 0x8000000080008008ULL
+};
+
 uint64_t **keccak_f(uint64_t **A)
 {
-	uint64_t RC[24];
-	uint8_t LFSR = 0x01;
-
-	// Generate 24 round constants
-	for (int i = 0; i < 24; i++)
-	{
-		RC[i] = 0;
-		for (int j = 0; j < 7; j++)
-		{
-			uint8_t bit = LFSR & 1;
-			if (bit)
-			{
-				RC[i] |= (uint64_t)1 << ((1 << j) - 1);
-			}
-			uint8_t temp = LFSR;
-			LFSR <<= 1;
-			if (temp & 0x80)
-			{
-				LFSR ^= 0x71;
-			}
-		}
-		A = sha3_round(A, RC[i], i);
-	}
-	return A;
+    // 完全展开 24 轮 sha3_round 调用
+    A = sha3_round(A, ROUND_CONSTANTS[0],  0);
+    A = sha3_round(A, ROUND_CONSTANTS[1],  1);
+    A = sha3_round(A, ROUND_CONSTANTS[2],  2);
+    A = sha3_round(A, ROUND_CONSTANTS[3],  3);
+    A = sha3_round(A, ROUND_CONSTANTS[4],  4);
+    A = sha3_round(A, ROUND_CONSTANTS[5],  5);
+    A = sha3_round(A, ROUND_CONSTANTS[6],  6);
+    A = sha3_round(A, ROUND_CONSTANTS[7],  7);
+    A = sha3_round(A, ROUND_CONSTANTS[8],  8);
+    A = sha3_round(A, ROUND_CONSTANTS[9],  9);
+    A = sha3_round(A, ROUND_CONSTANTS[10], 10);
+    A = sha3_round(A, ROUND_CONSTANTS[11], 11);
+    A = sha3_round(A, ROUND_CONSTANTS[12], 12);
+    A = sha3_round(A, ROUND_CONSTANTS[13], 13);
+    A = sha3_round(A, ROUND_CONSTANTS[14], 14);
+    A = sha3_round(A, ROUND_CONSTANTS[15], 15);
+    A = sha3_round(A, ROUND_CONSTANTS[16], 16);
+    A = sha3_round(A, ROUND_CONSTANTS[17], 17);
+    A = sha3_round(A, ROUND_CONSTANTS[18], 18);
+    A = sha3_round(A, ROUND_CONSTANTS[19], 19);
+    A = sha3_round(A, ROUND_CONSTANTS[20], 20);
+    A = sha3_round(A, ROUND_CONSTANTS[21], 21);
+    A = sha3_round(A, ROUND_CONSTANTS[22], 22);
+    A = sha3_round(A, ROUND_CONSTANTS[23], 23);
+    return A;
 }

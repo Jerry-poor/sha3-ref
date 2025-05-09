@@ -1,129 +1,113 @@
-#include <stdio.h>
 #include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
+#include "round.h"
 
-#define ROL64(x, n)  (((x) << (n)) | ((x) >> (64 - (n))))
+#define ROL64(x,n) (((x) << (n)) | ((x) >> (64 - (n))))
 
-int mod(int a, int b)
-{
-  if (b < 0) // you can check for b == 0 separately and do what you want
-    return mod(-a, -b);
-  int ret = a % b;
-  if (ret < 0)
-    ret += b;
-  return ret;
-}
+// 矩阵 Rho 位移常量表
+static const int RHO_OFFSETS[5][5] = {
+    {  0, 36,  3, 41, 18},
+    {  1, 44, 10, 45,  2},
+    { 62,  6, 43, 15, 61},
+    { 28, 55, 25, 21, 56},
+    { 27, 20, 39,  8, 14}
+};
 
 uint64_t **sha3_round(uint64_t **A, uint64_t RC, int round)
 {
-  uint64_t C[5];
-  uint64_t D[5];
-  uint64_t B[5][5];
+    uint64_t C0, C1, C2, C3, C4;
+    uint64_t D0, D1, D2, D3, D4;
+    uint64_t B[5][5];
+    uint64_t T[5][5];
 
-  /* Theta step */
-  for (uint8_t x = 0; x < 5; x++)
-  {
-    C[x] = A[x][0] ^ A[x][1] ^ A[x][2] ^ A[x][3] ^ A[x][4];
-  }
-  for (uint8_t x = 0; x < 5; x++)
-  {
-    D[x] = C[(x + 4) % 5] ^ ((C[(x + 1) % 5] << 1) | (C[(x + 1) % 5] >> 63));
-  }
-  for (uint8_t x = 0; x < 5; x++)
-  {
-    for (uint8_t y = 0; y < 5; y++)
-    {
-      A[x][y] = A[x][y] ^ D[x];
-    }
-  }
+    // Theta (完全展开)
+    C0 = A[0][0] ^ A[0][1] ^ A[0][2] ^ A[0][3] ^ A[0][4];
+    C1 = A[1][0] ^ A[1][1] ^ A[1][2] ^ A[1][3] ^ A[1][4];
+    C2 = A[2][0] ^ A[2][1] ^ A[2][2] ^ A[2][3] ^ A[2][4];
+    C3 = A[3][0] ^ A[3][1] ^ A[3][2] ^ A[3][3] ^ A[3][4];
+    C4 = A[4][0] ^ A[4][1] ^ A[4][2] ^ A[4][3] ^ A[4][4];
 
-#ifdef DEBUG
-  printf("[DEBUG] Round %d - After Theta step:\n", round);
-  for (uint8_t ix = 0; ix < 5; ix++) {
-    for (uint8_t iy = 0; iy < 5; iy++) {
-      printf("A[%u][%u] = %016llx ", ix, iy, (unsigned long long) A[ix][iy]);
-    }
-    printf("\n");
-  }
-  printf("\n");
-#endif
+    D0 = C4 ^ ROL64(C1, 1);
+    D1 = C0 ^ ROL64(C2, 1);
+    D2 = C1 ^ ROL64(C3, 1);
+    D3 = C2 ^ ROL64(C4, 1);
+    D4 = C3 ^ ROL64(C0, 1);
 
-  /* Rho step */
-  B[0][0] = A[0][0];
-  uint8_t x = 1, y = 0;
-  for (uint8_t t = 0; t < 24; t++) {
-      B[x][y] = ROL64(A[x][y], ((t + 1) * (t + 2) / 2) % 64);
-      uint8_t newX = y;
-      uint8_t newY = (2 * x + 3 * y) % 5;
-      x = newX;
-      y = newY;
-  }
+    // Apply D[x] to A[x][y]
+    A[0][0] ^= D0; A[0][1] ^= D0; A[0][2] ^= D0; A[0][3] ^= D0; A[0][4] ^= D0;
+    A[1][0] ^= D1; A[1][1] ^= D1; A[1][2] ^= D1; A[1][3] ^= D1; A[1][4] ^= D1;
+    A[2][0] ^= D2; A[2][1] ^= D2; A[2][2] ^= D2; A[2][3] ^= D2; A[2][4] ^= D2;
+    A[3][0] ^= D3; A[3][1] ^= D3; A[3][2] ^= D3; A[3][3] ^= D3; A[3][4] ^= D3;
+    A[4][0] ^= D4; A[4][1] ^= D4; A[4][2] ^= D4; A[4][3] ^= D4; A[4][4] ^= D4;
 
-#ifdef DEBUG
-  printf("[DEBUG] Round %d - After Rho step:\n", round);
-  for (uint8_t ix = 0; ix < 5; ix++) {
-    for (uint8_t iy = 0; iy < 5; iy++) {
-      printf("B[%u][%u] = %016llx ", ix, iy, (unsigned long long) B[ix][iy]);
-    }
-    printf("\n");
-  }
-  printf("\n");
-#endif
+    // Rho + Pi (完全展开)
+    B[0][0] = ROL64(A[0][0], RHO_OFFSETS[0][0]);
+    B[1][3] = ROL64(A[0][1], RHO_OFFSETS[0][1]);
+    B[2][1] = ROL64(A[0][2], RHO_OFFSETS[0][2]);
+    B[3][4] = ROL64(A[0][3], RHO_OFFSETS[0][3]);
+    B[4][2] = ROL64(A[0][4], RHO_OFFSETS[0][4]);
 
-  /* Pi step */
-  uint64_t T[5][5];
-  for (uint8_t px = 0; px < 5; px++) {
-    for (uint8_t py = 0; py < 5; py++) {
-      T[py][mod((2 * px + 3 * py), 5)] = B[px][py];
-    }
-  }
-  memcpy(B, T, sizeof(T));
+    B[0][2] = ROL64(A[1][0], RHO_OFFSETS[1][0]);
+    B[1][0] = ROL64(A[1][1], RHO_OFFSETS[1][1]);
+    B[2][3] = ROL64(A[1][2], RHO_OFFSETS[1][2]);
+    B[3][1] = ROL64(A[1][3], RHO_OFFSETS[1][3]);
+    B[4][4] = ROL64(A[1][4], RHO_OFFSETS[1][4]);
 
-#ifdef DEBUG
-  printf("[DEBUG] Round %d - After Pi step:\n", round);
-  for (uint8_t ix = 0; ix < 5; ix++) {
-    for (uint8_t iy = 0; iy < 5; iy++) {
-      printf("B[%u][%u] = %016llx ", ix, iy, (unsigned long long) B[ix][iy]);
-    }
-    printf("\n");
-  }
-  printf("\n");
-#endif
+    B[0][4] = ROL64(A[2][0], RHO_OFFSETS[2][0]);
+    B[1][2] = ROL64(A[2][1], RHO_OFFSETS[2][1]);
+    B[2][0] = ROL64(A[2][2], RHO_OFFSETS[2][2]);
+    B[3][3] = ROL64(A[2][3], RHO_OFFSETS[2][3]);
+    B[4][1] = ROL64(A[2][4], RHO_OFFSETS[2][4]);
 
-  /* Xi state */
-  for (uint8_t xx = 0; xx < 5; xx++)
-  {
-    for (uint8_t yy = 0; yy < 5; yy++)
-    {
-      A[xx][yy] = B[xx][yy] ^ ((~B[mod((xx + 1), 5)][yy]) & B[mod((xx + 2), 5)][yy]);
-    }
-  }
+    B[0][1] = ROL64(A[3][0], RHO_OFFSETS[3][0]);
+    B[1][4] = ROL64(A[3][1], RHO_OFFSETS[3][1]);
+    B[2][2] = ROL64(A[3][2], RHO_OFFSETS[3][2]);
+    B[3][0] = ROL64(A[3][3], RHO_OFFSETS[3][3]);
+    B[4][3] = ROL64(A[3][4], RHO_OFFSETS[3][4]);
 
-#ifdef DEBUG
-  printf("[DEBUG] Round %d - After Xi step:\n", round);
-  for (uint8_t ix = 0; ix < 5; ix++) {
-    for (uint8_t iy = 0; iy < 5; iy++) {
-      printf("A[%u][%u] = %016llx ", ix, iy, (unsigned long long) A[ix][iy]);
-    }
-    printf("\n");
-  }
-  printf("\n");
-#endif
+    B[0][3] = ROL64(A[4][0], RHO_OFFSETS[4][0]);
+    B[1][1] = ROL64(A[4][1], RHO_OFFSETS[4][1]);
+    B[2][4] = ROL64(A[4][2], RHO_OFFSETS[4][2]);
+    B[3][2] = ROL64(A[4][3], RHO_OFFSETS[4][3]);
+    B[4][0] = ROL64(A[4][4], RHO_OFFSETS[4][4]);
 
-  /* Last step */
-  A[0][0] = A[0][0] ^ RC;
+    //Chi (完全展开)
+    T[0][0] = B[0][0] ^ ((~B[1][0]) & B[2][0]);
+    T[0][1] = B[0][1] ^ ((~B[1][1]) & B[2][1]);
+    T[0][2] = B[0][2] ^ ((~B[1][2]) & B[2][2]);
+    T[0][3] = B[0][3] ^ ((~B[1][3]) & B[2][3]);
+    T[0][4] = B[0][4] ^ ((~B[1][4]) & B[2][4]);
 
-#ifdef DEBUG
-  printf("[DEBUG] Round %d - After last step (RC):\n", round);
-  for (uint8_t ix = 0; ix < 5; ix++) {
-    for (uint8_t iy = 0; iy < 5; iy++) {
-      printf("A[%u][%u] = %016llx ", ix, iy, (unsigned long long) A[ix][iy]);
-    }
-    printf("\n");
-  }
-  printf("\n");
-#endif
+    T[1][0] = B[1][0] ^ ((~B[2][0]) & B[3][0]);
+    T[1][1] = B[1][1] ^ ((~B[2][1]) & B[3][1]);
+    T[1][2] = B[1][2] ^ ((~B[2][2]) & B[3][2]);
+    T[1][3] = B[1][3] ^ ((~B[2][3]) & B[3][3]);
+    T[1][4] = B[1][4] ^ ((~B[2][4]) & B[3][4]);
 
-  return A;
+    T[2][0] = B[2][0] ^ ((~B[3][0]) & B[4][0]);
+    T[2][1] = B[2][1] ^ ((~B[3][1]) & B[4][1]);
+    T[2][2] = B[2][2] ^ ((~B[3][2]) & B[4][2]);
+    T[2][3] = B[2][3] ^ ((~B[3][3]) & B[4][3]);
+    T[2][4] = B[2][4] ^ ((~B[3][4]) & B[4][4]);
+
+    T[3][0] = B[3][0] ^ ((~B[4][0]) & B[0][0]);
+    T[3][1] = B[3][1] ^ ((~B[4][1]) & B[0][1]);
+    T[3][2] = B[3][2] ^ ((~B[4][2]) & B[0][2]);
+    T[3][3] = B[3][3] ^ ((~B[4][3]) & B[0][3]);
+    T[3][4] = B[3][4] ^ ((~B[4][4]) & B[0][4]);
+
+    T[4][0] = B[4][0] ^ ((~B[0][0]) & B[1][0]);
+    T[4][1] = B[4][1] ^ ((~B[0][1]) & B[1][1]);
+    T[4][2] = B[4][2] ^ ((~B[0][2]) & B[1][2]);
+    T[4][3] = B[4][3] ^ ((~B[0][3]) & B[1][3]);
+    T[4][4] = B[4][4] ^ ((~B[0][4]) & B[1][4]);
+
+    // 写回 A 并做 Iota
+    A[0][0] = T[0][0]; A[0][1] = T[0][1]; A[0][2] = T[0][2]; A[0][3] = T[0][3]; A[0][4] = T[0][4];
+    A[1][0] = T[1][0]; A[1][1] = T[1][1]; A[1][2] = T[1][2]; A[1][3] = T[1][3]; A[1][4] = T[1][4];
+    A[2][0] = T[2][0]; A[2][1] = T[2][1]; A[2][2] = T[2][2]; A[2][3] = T[2][3]; A[2][4] = T[2][4];
+    A[3][0] = T[3][0]; A[3][1] = T[3][1]; A[3][2] = T[3][2]; A[3][3] = T[3][3]; A[3][4] = T[3][4];
+    A[4][0] = T[4][0]; A[4][1] = T[4][1]; A[4][2] = T[4][2]; A[4][3] = T[4][3]; A[4][4] = T[4][4];
+
+    A[0][0] ^= RC;
+    return A;
 }
